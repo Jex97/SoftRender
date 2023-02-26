@@ -4,7 +4,6 @@
 
 #pragma once
 
-#pragma once
 #include "geometry.h"
 #include<vector>
 #include<string>
