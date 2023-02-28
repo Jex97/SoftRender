@@ -139,7 +139,7 @@ int main(int argc, char** argv) {
 
     TGAImage image(IMAGE_WIDTH, IMAGE_HEIGHT, TGAImage::RGB);
     float *zBuffer = new float[IMAGE_WIDTH * IMAGE_HEIGHT];
-    for(int i = 0; i < IMAGE_HEIGHT * IMAGE_WIDTH; ++i) zBuffer[i] = -std::numeric_limits<float>::max();
+    for(int i = 0; i < IMAGE_HEIGHT * IMAGE_WIDTH; ++i) zBuffer[i] = -std::numeric_limits<float>::max();   // Attention! min has been defined as the closest positive number to zero.
     for (int i=0; i<model->nfaces(); i++) {
         Vec3f face_pos[3];
         Vec3f screen_pos[3];
