@@ -10,9 +10,23 @@ const int IMAGE_HEIGHT = 800;
 const int IMAGE_WIDTH = 800;
 
 const Vec3f LIGHT = Vec3f(0, 0, -1);
+const Vec3f CAMERA_POS = Vec3f (0, 0, 5);
+Matrix ProjMat = Matrix::identity(4);
+
 Model *model = nullptr;
 std::string model_name;
 
+Vec3f m2v(const Matrix& m){
+    return Vec3f(m[0][0] / m[3][0], m[1][0] / m[3][0], m[2][0] / m[3][0]);
+}
+Matrix v2m(const Vec3f& v){
+    Matrix m(4, 1);
+    m[0][0] = v.x;
+    m[1][0] = v.y;
+    m[2][0] = v.z;
+    m[3][0] = 1.f;
+    return m;
+}
 
 //Bresenham¡¯s Line Drawing Algorithm
 void DrawLine(int x0, int y0, int x1, int y1, TGAImage& image, const TGAColor& color){
@@ -103,12 +117,18 @@ void DrawTriangle_zBuffer(Vec3f* pos, float* zBuffer, TGAImage& image, const TGA
         bboxmin.x = std::min(bboxmin.x, pos[i].x);
         bboxmin.y = std::min(bboxmin.y, pos[i].y);
     }
+    // remove outside part to the screen
+    bboxmin.x = std::max(bboxmin.x, 0.f);
+    bboxmin.y = std::max(bboxmin.y, 0.f);
+
+    bboxmax.x = std::min(bboxmax.x, image.get_width() - 1.f);
+    bboxmax.y = std::min(bboxmax.y, image.get_height() - 1.f);
+
     Vec3f P;
     for(P.x = bboxmin.x; P.x <= bboxmax.x; ++P.x){
         for(P.y = bboxmin.y; P.y <= bboxmax.y; ++P.y){
             Vec3f u = CalcBaryCentric(pos, P);
             if(u.x < 0 || u.y < 0 || u.z < 0) continue;
-
             P.z = 0;
             P.z = pos[0].z * u.x + pos[1].z * u.y + pos[2].z * u.z;
 
@@ -136,18 +156,19 @@ int main(int argc, char** argv) {
     }
 
     model_name = model_name.substr(0, model_name.find('.'));
-
+    ProjMat[3][2] = -1.f / CAMERA_POS[2];
     TGAImage image(IMAGE_WIDTH, IMAGE_HEIGHT, TGAImage::RGB);
     float *zBuffer = new float[IMAGE_WIDTH * IMAGE_HEIGHT];
-    for(int i = 0; i < IMAGE_HEIGHT * IMAGE_WIDTH; ++i) zBuffer[i] = -std::numeric_limits<float>::max();   // Attention! min has been defined as the closest positive number to zero.
+    for(int i = 0; i < IMAGE_HEIGHT * IMAGE_WIDTH; ++i)
+        zBuffer[i] = -std::numeric_limits<float>::max();   // Attention! min has been defined as the closest positive number to zero.
     for (int i=0; i<model->nfaces(); i++) {
         Vec3f face_pos[3];
         Vec3f screen_pos[3];
         for (int j=0; j<3; j++) {
-            face_pos[j].x = model->vertex(model->face(i)[j]).x;
-            face_pos[j].y = model->vertex(model->face(i)[j]).y;
-            face_pos[j].z = model->vertex(model->face(i)[j]).z;
-            GetScreenPos(face_pos[j], screen_pos[j]);
+            face_pos[j].x = model->vert(model->face(i)[j]).x;
+            face_pos[j].y = model->vert(model->face(i)[j]).y;
+            face_pos[j].z = model->vert(model->face(i)[j]).z;
+            GetScreenPos(m2v(ProjMat * v2m(face_pos[j])), screen_pos[j]);
         }
 
         Vec3f n = Vec3f(face_pos[2] - face_pos[0]) ^ (face_pos[1] - face_pos[0]);
@@ -159,7 +180,8 @@ int main(int argc, char** argv) {
     }
 
     image.flip_vertically();    // i want to have the origin at the left bottom corner of the image
-    image.write_tga_file(std::string("../output/" + model_name + ".tga").c_str());
+    image.write_tga_file(std::string("../output/" + model_name + "_Projection" + ".tga").c_str());
+
 
     return 0;
 }
