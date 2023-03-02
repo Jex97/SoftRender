@@ -9,9 +9,12 @@ const TGAColor red   = TGAColor(255, 0,   0,   255);
 const int IMAGE_HEIGHT = 800;
 const int IMAGE_WIDTH = 800;
 
-const Vec3f LIGHT = Vec3f(0, 0, -1);
-const Vec3f CAMERA_POS = Vec3f (0, 0, 5);
+Vec3f LIGHT = Vec3f(0, 0, -1);
+Vec3f cameraPos = Vec3f (0, 0, 5);
+Vec3f center = Vec3f (0, 0, 0);
 Matrix ProjMat = Matrix::identity(4);
+Matrix ModelViewMat = Matrix::identity(4);
+Matrix ViewPortMat = Matrix::identity(4);
 
 Model *model = nullptr;
 std::string model_name;
@@ -111,7 +114,10 @@ void DrawTriangle(Vec3f* pos, TGAImage& image, const TGAColor& color){
 void DrawTriangle_zBuffer(Vec3f* pos, float* zBuffer, TGAImage& image, const TGAColor& color){
     Vec2f bboxmin(image.get_width() - 1, image.get_height() - 1);
     Vec2f bboxmax(0, 0);
+
     for(int i = 0; i < 3; ++i){
+        pos[i].x = (int)pos[i].x;
+        pos[i].y = (int)pos[i].y;
         bboxmax.x = std::max(bboxmax.x, pos[i].x);
         bboxmax.y = std::max(bboxmax.y, pos[i].y);
         bboxmin.x = std::min(bboxmin.x, pos[i].x);
@@ -144,6 +150,33 @@ void GetScreenPos(const Vec3f& inputP0, Vec3f& outputP0){    // ensure x, y are 
     outputP0.y = int((inputP0.y+1.)*IMAGE_HEIGHT/2. + 0.5);
     outputP0.z = inputP0.z;
 }
+
+void LookAt(Vec3f eye, Vec3f _center, Vec3f up) {
+    Vec3f z = (eye-_center).normalize();
+    Vec3f x = (up ^ z).normalize();
+    Vec3f y = (z ^ x).normalize();
+    Matrix Minv = Matrix::identity(4);
+    Matrix Tr   = Matrix::identity(4);
+    for (int i=0; i<3; i++) {
+        Minv[0][i] = x[i];
+        Minv[1][i] = y[i];
+        Minv[2][i] = z[i];
+        Tr[i][3] = -eye[i];
+    }
+    ModelViewMat = Minv*Tr;
+}
+
+void GetViewPortMat(int x, int y, int w, int h, int depth = 256) {
+    ViewPortMat = Matrix::identity(4);
+    ViewPortMat[0][3] = x+w/2.f;
+    ViewPortMat[1][3] = y+h/2.f;
+    ViewPortMat[2][3] = depth/2.f;
+
+    ViewPortMat[0][0] = w/2.f;
+    ViewPortMat[1][1] = h/2.f;
+    ViewPortMat[2][2] = depth/2.f;
+}
+
 int main(int argc, char** argv) {
 
     Timer timer(__func__);
@@ -156,11 +189,17 @@ int main(int argc, char** argv) {
     }
 
     model_name = model_name.substr(0, model_name.find('.'));
-    ProjMat[3][2] = -1.f / CAMERA_POS[2];
+
+    cameraPos = Vec3f(0.5, 0.5, 0.5);
+    ProjMat[3][2] =  -1.f/(cameraPos - center).norm();
     TGAImage image(IMAGE_WIDTH, IMAGE_HEIGHT, TGAImage::RGB);
     float *zBuffer = new float[IMAGE_WIDTH * IMAGE_HEIGHT];
     for(int i = 0; i < IMAGE_HEIGHT * IMAGE_WIDTH; ++i)
         zBuffer[i] = -std::numeric_limits<float>::max();   // Attention! min has been defined as the closest positive number to zero.
+
+
+    LookAt(cameraPos, Vec3f(0, 0, 0), Vec3f(0, 1, 0));
+    GetViewPortMat(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT);
     for (int i=0; i<model->nfaces(); i++) {
         Vec3f face_pos[3];
         Vec3f screen_pos[3];
@@ -168,7 +207,9 @@ int main(int argc, char** argv) {
             face_pos[j].x = model->vert(model->face(i)[j]).x;
             face_pos[j].y = model->vert(model->face(i)[j]).y;
             face_pos[j].z = model->vert(model->face(i)[j]).z;
-            GetScreenPos(m2v(ProjMat * v2m(face_pos[j])), screen_pos[j]);
+            //GetScreenPos(m2v(ProjMat * v2m(face_pos[j])), screen_pos[j]);
+            screen_pos[j] = m2v(ViewPortMat * ProjMat * ModelViewMat * v2m(face_pos[j]));
+
         }
 
         Vec3f n = Vec3f(face_pos[2] - face_pos[0]) ^ (face_pos[1] - face_pos[0]);
@@ -180,8 +221,9 @@ int main(int argc, char** argv) {
     }
 
     image.flip_vertically();    // i want to have the origin at the left bottom corner of the image
-    image.write_tga_file(std::string("../output/" + model_name + "_Projection" + ".tga").c_str());
-
+    image.write_tga_file(std::string("../output/" + model_name + std::to_string(cameraPos[0]) + "_"
+                                     + "_" + std::to_string(cameraPos[1]) + "_" + std::to_string(cameraPos[2])
+                                     + ".tga").c_str());
 
     return 0;
 }
